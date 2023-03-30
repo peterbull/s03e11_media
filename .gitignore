@@ -50,3 +50,6 @@ app.db
 
 # project data
 playground-series-s3e11
+
+# models
+models/*
