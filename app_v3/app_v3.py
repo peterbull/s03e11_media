@@ -3,7 +3,7 @@
 # %% auto 0
 __all__ = ['comp', 'path', 'df_train', 'df_test', 'df_comb', 'train_idxs', 'test_idxs', 'to_final', 'test_final', 'dls_final',
            'fast_train', 'epochs', 'test_dl', 'preds_final', 'xs', 'y', 'valid_xs', 'valid_y', 'test_xs', 'm',
-           'train_fi', 'target_fi', 'x_train', 'x_test', 'y_train', 'y_test', 'fi_params', 'model', 'rf_preds',
+           'rf_preds', 'train_fi', 'target_fi', 'x_train', 'x_test', 'y_train', 'y_test', 'fi_params', 'model',
            'ens_preds', 'sample_df', 'rf', 'r_mse', 'm_rmse', 'rf_feat_importance', 'plot_fi']
 
 # %% ../media_campaign_cost_boost.ipynb 4
@@ -12,6 +12,7 @@ from fastai.tabular.all import *
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.inspection import permutation_importance
+
 
 import xgboost as xgb
 
@@ -40,105 +41,103 @@ df_train.drop(['id'], axis=1, inplace=True)
 df_test.drop(['id'], axis=1, inplace=True)
 df_comb.drop(['id'], axis=1, inplace=True)
 
-# %% ../media_campaign_cost_boost.ipynb 12
+# %% ../media_campaign_cost_boost.ipynb 13
 df_train['store_sales_per_children'] = df_train['store_sales(in millions)'] / df_train['total_children']
 
-# %% ../media_campaign_cost_boost.ipynb 13
+# %% ../media_campaign_cost_boost.ipynb 14
 for column in df_train.columns:
     if (list(df_train[column].unique()) == [0.0, 1.0]):
         df_train.loc[:, column] = df_train[column].astype('bool')
 
-# %% ../media_campaign_cost_boost.ipynb 14
+# %% ../media_campaign_cost_boost.ipynb 15
 train_idxs = np.arange(len(df_train))
 test_idxs = np.arange(len(df_train), len(df_comb))
 
-# %% ../media_campaign_cost_boost.ipynb 17
+# %% ../media_campaign_cost_boost.ipynb 18
 to_final = TabularPandas(df_train, procs, cat, cont, y_names=dep_var, splits=splits)
 test_final = TabularPandas(df_test, procs, cat, cont, y_names=None, splits=None)
 dls_final = to_final.dataloaders(bs=1024)
 
-# %% ../media_campaign_cost_boost.ipynb 18
+# %% ../media_campaign_cost_boost.ipynb 19
 fast_train = False
 epochs = 14
 
-# %% ../media_campaign_cost_boost.ipynb 20
+# %% ../media_campaign_cost_boost.ipynb 21
 if fast_train == True:
     learn_final = tabular_learner(dls_final, layers=[200, 100], y_range=(0, 150), metrics=rmse)
     learn_final.fit_one_cycle(epochs, 1e-2)
     learn_final.export('models/tab_learner.pkl')
 
 
-# %% ../media_campaign_cost_boost.ipynb 22
+# %% ../media_campaign_cost_boost.ipynb 23
 test_dl = learn_final.dls.test_dl(df_test)
 preds_final, _ = learn_final.get_preds(dl=test_dl)
 
-# %% ../media_campaign_cost_boost.ipynb 24
+# %% ../media_campaign_cost_boost.ipynb 25
 preds_final = preds_final.squeeze()
 
-# %% ../media_campaign_cost_boost.ipynb 26
+# %% ../media_campaign_cost_boost.ipynb 27
 xs, y = to_final.train.xs, to_final.train.y
 valid_xs, valid_y = to_final.valid.xs, to_final.valid.y
 test_xs = test_final.train.xs
 
-# %% ../media_campaign_cost_boost.ipynb 27
+# %% ../media_campaign_cost_boost.ipynb 28
 def rf(xs, y, n_estimators=40, max_samples=200_000, max_features=0.5, min_samples_leaf=5, **kwargs):
     return RandomForestRegressor(n_jobs=-1, n_estimators=n_estimators, 
                                  max_samples=max_samples, max_features=max_features,
                                  min_samples_leaf=min_samples_leaf, oob_score=True).fit(xs, y)
 
-# %% ../media_campaign_cost_boost.ipynb 28
+# %% ../media_campaign_cost_boost.ipynb 29
 def r_mse(pred, y):
     return round(math.sqrt(((pred-y)**2).mean()), 6)
 
-# %% ../media_campaign_cost_boost.ipynb 29
+# %% ../media_campaign_cost_boost.ipynb 30
 def m_rmse(m, xs, y):
     return r_mse(m.predict(xs), y)
 
-# %% ../media_campaign_cost_boost.ipynb 30
+# %% ../media_campaign_cost_boost.ipynb 31
 m = rf(xs, y, n_estimators=100)
 
 # %% ../media_campaign_cost_boost.ipynb 33
+rf_preds = m.predict(test_xs)
+
+# %% ../media_campaign_cost_boost.ipynb 35
 def rf_feat_importance(m, df):
     return pd.DataFrame({'cols':df.columns, 'imp': m.feature_importances_}).sort_values('imp', ascending=False) 
 
-# %% ../media_campaign_cost_boost.ipynb 37
+# %% ../media_campaign_cost_boost.ipynb 39
 train_fi = df_train.drop(columns = ['cost'])
 target_fi = df_train['cost']
 
-# %% ../media_campaign_cost_boost.ipynb 38
+# %% ../media_campaign_cost_boost.ipynb 40
 def plot_fi(data,ax = None,title = None):
     fi = pd.Series(data, index = train_fi.columns).sort_values(ascending = True)
     fi.plot(kind = 'barh', ax = ax)
 
-# %% ../media_campaign_cost_boost.ipynb 39
+# %% ../media_campaign_cost_boost.ipynb 41
 x_train, x_test, y_train, y_test = train_test_split(train_fi, target_fi, test_size=0.2)
 
-# %% ../media_campaign_cost_boost.ipynb 40
+# %% ../media_campaign_cost_boost.ipynb 42
 fi_params = {'learning_rate': 0.2456172216493356,
  'max_depth': 10,
  'lambda': 0.0023120639864473262,
  'alpha': 0.5848465230832824,
  'colsample_bytree': 0.9966638720347625,
  'min_child_weight': 0,
- 'sampling_method': 'uniform',
- 'tree_method': 'gpu_hist',
  'objective': 'reg:squaredlogerror',
  'eval_metric': 'rmsle'}
 
-# %% ../media_campaign_cost_boost.ipynb 42
+# %% ../media_campaign_cost_boost.ipynb 44
 model = xgb.XGBRegressor(**fi_params)
 
 
-# %% ../media_campaign_cost_boost.ipynb 44
+# %% ../media_campaign_cost_boost.ipynb 45
 model.fit(x_train, y_train)
 
-# %% ../media_campaign_cost_boost.ipynb 57
-rf_preds = m.predict(test_xs)
+# %% ../media_campaign_cost_boost.ipynb 81
+ens_preds = (to_np(preds_final) + rf_preds + preds) / 3
 
-# %% ../media_campaign_cost_boost.ipynb 58
-ens_preds = (to_np(preds_final) + rf_preds + xgb_preds) / 3
-
-# %% ../media_campaign_cost_boost.ipynb 59
+# %% ../media_campaign_cost_boost.ipynb 82
 sample_df = pd.read_csv(path/'sample_submission.csv')
 sample_df['cost'] = preds_final
 sample_df.to_csv('submission.csv', index=False)
