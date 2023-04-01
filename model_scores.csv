@@ -1,3 +1,4 @@
 model,current_score
 rf_model,0.30094
 nn_model,0.29889
+xgb_model,0.34375
